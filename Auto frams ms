@@ -1,8 +1,8 @@
---[[
-    Script Auto Farm Marshmallow + Safe Zone + Bike Teleport
-    Untuk game South Bronx di Roblox
-    Cara pakai: Jalankan di executor (Synapse, Krnl, dll.)
-]]
+-- ============================================================
+-- LENGER STORE - Marshmallow Auto Farm
+-- Untuk game South Bronx (Roblox)
+-- Versi: 2.0
+-- ============================================================
 
 repeat task.wait() until game:IsLoaded()
 
@@ -19,14 +19,14 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Konfigurasi
 local Config = {
-    MovementType = "Bike",   -- "Bike" atau "SafeMode"
-    BatchAmount = 5,         -- Jumlah marshmallow per siklus
+    MovementType = "Bike",
+    BatchAmount = 5,
     EnableFarm = false,
-    SafeZonePosition = CFrame.new(510, 4, 602), -- Tempat jual/beli (dealer)
+    SafeZonePosition = CFrame.new(510, 4, 602),
 }
 
 -- State
-local MarshMallowStep = "Water"  -- Water, Sugar, Gelatin, Collect, Sell
+local MarshMallowStep = "Water"
 local FarmThread = nil
 local IsRunning = false
 local Stats = {
@@ -38,11 +38,9 @@ local Stats = {
     Deaths = 0,
 }
 local Task_Text = ""
-local Bike = nil
 
 -- ==================== UTILITY FUNCTIONS ====================
 
--- Cari sepeda milik pemain
 local function FindBike()
     for _, obj in Workspace:GetChildren() do
         if obj:FindFirstChild("Owner") and string.match(tostring(obj), LocalPlayer.Name .. "'s Car") then
@@ -54,7 +52,6 @@ local function FindBike()
     return nil
 end
 
--- Teleport dengan mode yang dipilih
 local function Teleport(destination)
     if Config.MovementType == "Bike" then
         local bike = FindBike()
@@ -62,20 +59,17 @@ local function Teleport(destination)
             Library:Notification("Bike", "Tidak menemukan sepeda, spawn dulu!", 3)
             return "Failed"
         end
-        -- Pastikan pemain duduk di sepeda
         local seat = bike:FindFirstChild("DriveSeat")
         if not seat or seat.Occupant ~= LocalPlayer.Character and seat.Occupant ~= LocalPlayer.Character.Humanoid then
             Library:Notification("Bike", "Anda belum duduk di sepeda!", 3)
             return "Failed"
         end
-        -- Teleport sepeda ke tujuan
         for _ = 1, 30 do
             bike:SetPrimaryPartCFrame(destination + Vector3.new(0, 1.5, 0))
         end
         task.wait(0.5)
         return "Success"
     else
-        -- Safe Mode: teleport karakter langsung (dengan anti-fall)
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not root then return "Failed" end
         root.CFrame = destination
@@ -84,7 +78,6 @@ local function Teleport(destination)
     end
 end
 
--- Equip tool dari backpack
 local function EquipTool(toolName)
     local character = LocalPlayer.Character
     if not character then return false end
@@ -99,7 +92,6 @@ local function EquipTool(toolName)
     return false
 end
 
--- Hitung jumlah item di backpack + tangan
 local function CountItem(name)
     local count = 0
     for _, item in ipairs(LocalPlayer.Backpack:GetChildren()) do
@@ -113,7 +105,6 @@ local function CountItem(name)
     return count
 end
 
--- Fire proximity prompt dengan aman
 local function FirePrompt(prompt)
     if not prompt or not prompt:IsA("ProximityPrompt") then return false end
     pcall(function()
@@ -127,7 +118,6 @@ local function FirePrompt(prompt)
     return true
 end
 
--- Cari apartemen pribadi
 local function GetPersonalApartment()
     local apts = Workspace.Map and Workspace.Map:FindFirstChild("APTS")
     if not apts then return nil end
@@ -145,7 +135,6 @@ local function GetPersonalApartment()
     return nil
 end
 
--- Cari apartemen kosong
 local function GetUnclaimedApartment()
     local apts = Workspace.Map and Workspace.Map:FindFirstChild("APTS")
     if not apts then return nil end
@@ -163,7 +152,6 @@ local function GetUnclaimedApartment()
     return nil
 end
 
--- Dapatkan interior apartemen
 local function GetHouseInterior()
     local apt = GetPersonalApartment()
     if not apt then return nil end
@@ -174,7 +162,6 @@ local function GetHouseInterior()
     return nil
 end
 
--- Beli apartemen jika belum punya
 local function BuyApartment()
     local apt = GetPersonalApartment()
     if apt then
@@ -186,7 +173,6 @@ local function BuyApartment()
         Library:Notification("Apartemen", "Tidak ada apartemen kosong!", 3)
         return false
     end
-    -- Teleport ke papan apartemen
     local board = vacant:FindFirstChild("Board")
     if not board then return false end
     local prompt = board:FindFirstChild("backboard") and board.backboard:FindFirstChildOfClass("ProximityPrompt")
@@ -199,7 +185,6 @@ local function BuyApartment()
     return true
 end
 
--- Spawn sepeda
 local function SpawnBike()
     local bike = FindBike()
     if bike then
@@ -218,13 +203,12 @@ local function SpawnBike()
     end
 end
 
--- ==================== AUTO SAFE ZONE ====================
 local function GoToSafeZone()
     Teleport(Config.SafeZonePosition)
     task.wait(1)
 end
 
--- ==================== MARSHMALLOW FARM ====================
+-- ==================== MARSHMALLOW FARM CORE ====================
 local Items = {"Gelatin", "Sugar Block Bag", "Water"}
 local ItemPrices = {Gelatin = 70, ["Sugar Block Bag"] = 100, Water = 20}
 local MarshmallowSellPrice = {
@@ -241,10 +225,8 @@ local function GetMarshmallowType(name)
     return nil
 end
 
--- Step: Beli bahan
 local function BuyIngredients()
     local needed = Config.BatchAmount
-    -- Hitung total marshmallow yang sudah ada
     local crafted = 0
     for _, m in ipairs(MarshmallowNames) do
         crafted = crafted + CountItem(m)
@@ -266,9 +248,7 @@ local function BuyIngredients()
     return true
 end
 
--- Fungsi memasak: lakukan satu siklus
 local function CookCycle()
-    -- Pastikan punya apartemen
     local apt = GetPersonalApartment()
     if not apt then
         Library:Notification("Apartemen", "Belum punya apartemen, membeli...", 3)
@@ -288,11 +268,9 @@ local function CookCycle()
         return false
     end
 
-    -- Teleport ke kompor
     Teleport(pot.CFrame)
     task.wait(0.5)
 
-    -- Fungsi untuk memicu prompt dengan tampilan
     local function DoStep(stepName, toolName, waitText, delay)
         if stepName == "Water" then
             if not EquipTool("Water") then
@@ -301,7 +279,6 @@ local function CookCycle()
             end
             FirePrompt(pot.Attachment.ProximityPrompt)
             task.wait(2)
-            -- Tunggu hingga task update menunjukkan "Wait 20 seconds..."
             local timeout = 0
             repeat
                 task.wait(0.5)
@@ -361,24 +338,17 @@ local function CookCycle()
         return true
     end
 
-    -- Urutan langkah
     local steps = {"Water", "Sugar", "Gelatin", "Collect"}
     for _, step in ipairs(steps) do
         if not IsRunning then return false end
         if not DoStep(step) then return false end
-        if Config.MovementType == "Bike" then
-            -- Pindah ke safe zone sebentar untuk menghindari lag? (opsional)
-        end
     end
-
     return true
 end
 
--- Step: Jual marshmallow
 local function SellMarshmallows()
     Teleport(Config.SafeZonePosition)
     task.wait(1)
-    -- Cari NPC Lamont Bell
     local npc = Workspace.Folders and Workspace.Folders.NPCs and Workspace.Folders.NPCs:FindFirstChild("Lamont Bell")
     if not npc then
         Library:Notification("Error", "NPC Lamont Bell tidak ditemukan!", 3)
@@ -387,7 +357,6 @@ local function SellMarshmallows()
     local prompt = npc.UpperTorso:FindFirstChildOfClass("ProximityPrompt")
     if not prompt then return false end
 
-    -- Jual semua marshmallow di backpack
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") then
             local mType = GetMarshmallowType(tool.Name)
@@ -408,27 +377,20 @@ local function SellMarshmallows()
     return true
 end
 
--- Loop utama farm
 local function FarmLoop()
     while IsRunning do
-        -- 1. Beli bahan
         BuyIngredients()
-        -- 2. Masak
         CookCycle()
-        -- 3. Jual dan safe zone (sudah di SellMarshmallows)
         SellMarshmallows()
-        -- 4. Kembali ke safe zone untuk aman
         GoToSafeZone()
         task.wait(1)
     end
 end
 
--- Mulai farm
 local function StartFarm()
     if IsRunning then return end
     IsRunning = true
     MarshMallowStep = "Water"
-    -- Pastikan ada sepeda jika mode bike
     if Config.MovementType == "Bike" then
         local bike = FindBike()
         if not bike then
@@ -442,7 +404,6 @@ local function StartFarm()
                 return
             end
         end
-        -- Coba duduki sepeda
         local seat = bike:FindFirstChild("DriveSeat")
         if seat then
             local prompt = seat:FindFirstChild("Attachment") and seat.Attachment:FindFirstChildOfClass("ProximityPrompt")
@@ -490,103 +451,12 @@ LocalPlayer.Idled:Connect(function()
     end
 end)
 
--- ==================== GUI ====================
-local Library = loadstring(game:HttpGet("https://pastebin.com/raw/vZYJc3ay"))()
-local Window = Library:Window({ Prefix = "Marshmallow", Suffix = "Farm" })
-
--- Tab utama
-local MainTab = Window:Tab({ Name = "Farm" })
-local Controls = MainTab:Section({ Name = "Kontrol", Side = "Left" })
-local StatsSection = MainTab:Section({ Name = "Statistik", Side = "Right" })
-
--- Dropdown movement type
-Controls:Dropdown({
-    Name = "Mode Teleport",
-    Flag = "Movement",
-    Options = {"Bike", "SafeMode"},
-    Default = "Bike",
-    Callback = function(val)
-        Config.MovementType = val
-    end
-})
-
--- Slider batch
-Controls:Slider({
-    Name = "Batch Amount",
-    Flag = "Batch",
-    Min = 1,
-    Max = 30,
-    Default = 5,
-    Suffix = "x",
-    Callback = function(val)
-        Config.BatchAmount = val
-    end
-})
-
--- Tombol spawn bike
-Controls:Button({
-    Name = "Spawn Bike",
-    Callback = SpawnBike
-})
-
--- Tombol beli apartemen
-Controls:Button({
-    Name = "Beli Apartemen ($250)",
-    Callback = BuyApartment
-})
-
--- Toggle start/stop
-local farmToggle
-Controls:Toggle({
-    Name = "Start / Stop Farm",
-    Flag = "FarmToggle",
-    Default = false,
-    Callback = function(state)
-        if state then
-            StartFarm()
-        else
-            StopFarm()
-        end
-    end
-})
-
--- Tombol safe zone manual
-Controls:Button({
-    Name = "Teleport ke Safe Zone",
-    Callback = GoToSafeZone
-})
-
--- Label statistik
-local statusLabel = StatsSection:Label({ Name = "Status: Stopped" })
-local stepLabel = StatsSection:Label({ Name = "Step: -" })
-local earnedLabel = StatsSection:Label({ Name = "Earned: $0" })
-local soldLabel = StatsSection:Label({ Name = "Total Sold: 0" })
-local smallLabel = StatsSection:Label({ Name = "Small: 0" })
-local mediumLabel = StatsSection:Label({ Name = "Medium: 0" })
-local largeLabel = StatsSection:Label({ Name = "Large: 0" })
-local deathsLabel = StatsSection:Label({ Name = "Deaths: 0" })
-
--- Update statistik setiap detik
-task.spawn(function()
-    while task.wait(1) do
-        statusLabel:Set("Status: " .. (IsRunning and "Running" or "Stopped"))
-        stepLabel:Set("Step: " .. MarshMallowStep)
-        earnedLabel:Set("Earned: $" .. Stats.Earned)
-        soldLabel:Set("Total Sold: " .. Stats.TotalSold)
-        smallLabel:Set("Small: " .. Stats.Small)
-        mediumLabel:Set("Medium: " .. Stats.Medium)
-        largeLabel:Set("Large: " .. Stats.Large)
-        deathsLabel:Set("Deaths: " .. Stats.Deaths)
-    end
-end)
-
 -- ==================== DEATH HANDLER ====================
 local function onDeath()
     Stats.Deaths = Stats.Deaths + 1
     if IsRunning then
         Library:Notification("Death", "Karakter mati! Melanjutkan farm...", 3)
         task.wait(3)
-        -- Coba kembali ke safe zone
         GoToSafeZone()
     end
 end
@@ -608,4 +478,121 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     end
 end)
 
-print("Script Loaded! Silakan buka GUI dan mulai farm.")
+-- ============================================================
+-- GUI LENGER STORE (RAPI & BERFUNGSI)
+-- ============================================================
+
+local Library = loadstring(game:HttpGet("https://pastebin.com/raw/vZYJc3ay"))()
+if not Library then
+    -- Fallback jika library gagal load
+    print("Gagal load library GUI, gunakan UI default")
+    -- Buat notifikasi sederhana
+    local function notif(title, text, dur)
+        print(title, text)
+    end
+    Library = { Notification = notif }
+    -- Tapi kita tetap butuh Window, dll. Lebih baik hentikan.
+    return
+end
+
+-- Buat window utama
+local Window = Library:Window({
+    Prefix = "LENGER",
+    Suffix = "STORE",
+})
+
+-- Tab Marshmallow
+local MainTab = Window:Tab({ Name = "Marshmallow" })
+
+-- Panel Kiri: Kontrol
+local Controls = MainTab:Section({ Name = "Kontrol Farm", Side = "Left" })
+
+-- Dropdown Movement
+Controls:Dropdown({
+    Name = "Mode Teleport",
+    Flag = "Movement",
+    Options = {"Bike", "SafeMode"},
+    Default = "Bike",
+    Callback = function(val)
+        Config.MovementType = val
+    end
+})
+
+-- Slider Batch
+Controls:Slider({
+    Name = "Batch Amount",
+    Flag = "Batch",
+    Min = 1,
+    Max = 30,
+    Default = 5,
+    Suffix = "x",
+    Callback = function(val)
+        Config.BatchAmount = val
+    end
+})
+
+-- Tombol Spawn Bike
+Controls:Button({
+    Name = "🛵 Spawn Bike",
+    Callback = SpawnBike
+})
+
+-- Tombol Beli Apartemen
+Controls:Button({
+    Name = "🏠 Buy Apartment ($250)",
+    Callback = BuyApartment
+})
+
+-- Tombol Safe Zone
+Controls:Button({
+    Name = "🏛️ Go to Safe Zone",
+    Callback = GoToSafeZone
+})
+
+-- Toggle Start/Stop
+Controls:Toggle({
+    Name = "▶️ Start / ⏹️ Stop Farm",
+    Flag = "FarmToggle",
+    Default = false,
+    Callback = function(state)
+        if state then
+            StartFarm()
+        else
+            StopFarm()
+        end
+    end
+})
+
+-- Panel Kanan: Statistik
+local StatsSection = MainTab:Section({ Name = "Statistik", Side = "Right" })
+
+-- Label statistik (akan di-update setiap detik)
+local statusLabel = StatsSection:Label({ Name = "Status: ⚪ Stopped" })
+local stepLabel = StatsSection:Label({ Name = "Step: —" })
+local earnedLabel = StatsSection:Label({ Name = "💰 Earned: $0" })
+local soldLabel = StatsSection:Label({ Name = "📦 Total Sold: 0" })
+local smallLabel = StatsSection:Label({ Name = "🟢 Small: 0" })
+local mediumLabel = StatsSection:Label({ Name = "🟡 Medium: 0" })
+local largeLabel = StatsSection:Label({ Name = "🔴 Large: 0" })
+local deathsLabel = StatsSection:Label({ Name = "💀 Deaths: 0" })
+
+-- Update statistik setiap detik
+task.spawn(function()
+    while task.wait(1) do
+        statusLabel:Set("Status: " .. (IsRunning and "🟢 Running" or "⚪ Stopped"))
+        stepLabel:Set("Step: " .. MarshMallowStep)
+        earnedLabel:Set("💰 Earned: $" .. Stats.Earned)
+        soldLabel:Set("📦 Total Sold: " .. Stats.TotalSold)
+        smallLabel:Set("🟢 Small: " .. Stats.Small)
+        mediumLabel:Set("🟡 Medium: " .. Stats.Medium)
+        largeLabel:Set("🔴 Large: " .. Stats.Large)
+        deathsLabel:Set("💀 Deaths: " .. Stats.Deaths)
+    end
+end)
+
+-- Footer (opsional)
+local Footer = MainTab:Section({ Name = "Info", Side = "Left" })
+Footer:Label({ Name = "LENGER STORE v2.0 | Auto Marshmallow Farm" })
+Footer:Label({ Name = "Gunakan dengan bijak | Risiko ban ditanggung sendiri" })
+
+print("LENGER STORE GUI loaded successfully!")
