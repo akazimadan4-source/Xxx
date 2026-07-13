@@ -1,0 +1,611 @@
+--[[
+    Script Auto Farm Marshmallow + Safe Zone + Bike Teleport
+    Untuk game South Bronx di Roblox
+    Cara pakai: Jalankan di executor (Synapse, Krnl, dll.)
+]]
+
+repeat task.wait() until game:IsLoaded()
+
+-- Services
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
+
+-- Konfigurasi
+local Config = {
+    MovementType = "Bike",   -- "Bike" atau "SafeMode"
+    BatchAmount = 5,         -- Jumlah marshmallow per siklus
+    EnableFarm = false,
+    SafeZonePosition = CFrame.new(510, 4, 602), -- Tempat jual/beli (dealer)
+}
+
+-- State
+local MarshMallowStep = "Water"  -- Water, Sugar, Gelatin, Collect, Sell
+local FarmThread = nil
+local IsRunning = false
+local Stats = {
+    Earned = 0,
+    TotalSold = 0,
+    Small = 0,
+    Medium = 0,
+    Large = 0,
+    Deaths = 0,
+}
+local Task_Text = ""
+local Bike = nil
+
+-- ==================== UTILITY FUNCTIONS ====================
+
+-- Cari sepeda milik pemain
+local function FindBike()
+    for _, obj in Workspace:GetChildren() do
+        if obj:FindFirstChild("Owner") and string.match(tostring(obj), LocalPlayer.Name .. "'s Car") then
+            if obj:FindFirstChild("Body") and obj.Body:FindFirstChild("Passenger") then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+-- Teleport dengan mode yang dipilih
+local function Teleport(destination)
+    if Config.MovementType == "Bike" then
+        local bike = FindBike()
+        if not bike then
+            Library:Notification("Bike", "Tidak menemukan sepeda, spawn dulu!", 3)
+            return "Failed"
+        end
+        -- Pastikan pemain duduk di sepeda
+        local seat = bike:FindFirstChild("DriveSeat")
+        if not seat or seat.Occupant ~= LocalPlayer.Character and seat.Occupant ~= LocalPlayer.Character.Humanoid then
+            Library:Notification("Bike", "Anda belum duduk di sepeda!", 3)
+            return "Failed"
+        end
+        -- Teleport sepeda ke tujuan
+        for _ = 1, 30 do
+            bike:SetPrimaryPartCFrame(destination + Vector3.new(0, 1.5, 0))
+        end
+        task.wait(0.5)
+        return "Success"
+    else
+        -- Safe Mode: teleport karakter langsung (dengan anti-fall)
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root then return "Failed" end
+        root.CFrame = destination
+        task.wait(0.3)
+        return "Success"
+    end
+end
+
+-- Equip tool dari backpack
+local function EquipTool(toolName)
+    local character = LocalPlayer.Character
+    if not character then return false end
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    local tool = LocalPlayer.Backpack:FindFirstChild(toolName) or character:FindFirstChild(toolName)
+    if tool then
+        pcall(function() hum:EquipTool(tool) end)
+        task.wait(0.3)
+        return true
+    end
+    return false
+end
+
+-- Hitung jumlah item di backpack + tangan
+local function CountItem(name)
+    local count = 0
+    for _, item in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if item.Name == name then count = count + 1 end
+    end
+    if LocalPlayer.Character then
+        for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
+            if item:IsA("Tool") and item.Name == name then count = count + 1 end
+        end
+    end
+    return count
+end
+
+-- Fire proximity prompt dengan aman
+local function FirePrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return false end
+    pcall(function()
+        prompt.HoldDuration = 0
+        prompt.RequiresLineOfSight = false
+        prompt.MaxActivationDistance = 50
+        prompt:InputHoldBegin()
+        task.wait(0.05)
+        prompt:InputHoldEnd()
+    end)
+    return true
+end
+
+-- Cari apartemen pribadi
+local function GetPersonalApartment()
+    local apts = Workspace.Map and Workspace.Map:FindFirstChild("APTS")
+    if not apts then return nil end
+    for _, apt in ipairs(apts:GetChildren()) do
+        local board = apt:FindFirstChild("Board")
+        if board then
+            local label = board:FindFirstChild("name") and board.name:FindFirstChild("SurfaceGui")
+            if label and label:FindFirstChild("TextLabel") then
+                if label.TextLabel.Text == LocalPlayer.Name then
+                    return apt
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Cari apartemen kosong
+local function GetUnclaimedApartment()
+    local apts = Workspace.Map and Workspace.Map:FindFirstChild("APTS")
+    if not apts then return nil end
+    for _, apt in ipairs(apts:GetChildren()) do
+        local board = apt:FindFirstChild("Board")
+        if board then
+            local label = board:FindFirstChild("name") and board.name:FindFirstChild("SurfaceGui")
+            if label and label:FindFirstChild("TextLabel") then
+                if label.TextLabel.Text == "VACANT" then
+                    return apt
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Dapatkan interior apartemen
+local function GetHouseInterior()
+    local apt = GetPersonalApartment()
+    if not apt then return nil end
+    local house = Workspace.Map.Houses:FindFirstChild(apt.Name) or Workspace.Map.Locations.Apartments:FindFirstChild(apt.Name)
+    if house then
+        return house:FindFirstChild("Interior") or house
+    end
+    return nil
+end
+
+-- Beli apartemen jika belum punya
+local function BuyApartment()
+    local apt = GetPersonalApartment()
+    if apt then
+        Library:Notification("Apartemen", "Sudah punya apartemen!", 3)
+        return true
+    end
+    local vacant = GetUnclaimedApartment()
+    if not vacant then
+        Library:Notification("Apartemen", "Tidak ada apartemen kosong!", 3)
+        return false
+    end
+    -- Teleport ke papan apartemen
+    local board = vacant:FindFirstChild("Board")
+    if not board then return false end
+    local prompt = board:FindFirstChild("backboard") and board.backboard:FindFirstChildOfClass("ProximityPrompt")
+    if not prompt then return false end
+    Teleport(CFrame.new(board.Position))
+    task.wait(0.5)
+    FirePrompt(prompt)
+    task.wait(1)
+    Library:Notification("Apartemen", "Berhasil membeli apartemen!", 3)
+    return true
+end
+
+-- Spawn sepeda
+local function SpawnBike()
+    local bike = FindBike()
+    if bike then
+        Library:Notification("Bike", "Sepeda sudah ada!", 3)
+        return
+    end
+    local b = buffer.create(1)
+    buffer.writeu8(b, 0, 1)
+    ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("RPC"):FireServer(b, "Spawn", "DirtBike")
+    task.wait(2)
+    bike = FindBike()
+    if bike then
+        Library:Notification("Bike", "Sepeda berhasil di-spawn!", 3)
+    else
+        Library:Notification("Bike", "Gagal spawn sepeda!", 3)
+    end
+end
+
+-- ==================== AUTO SAFE ZONE ====================
+local function GoToSafeZone()
+    Teleport(Config.SafeZonePosition)
+    task.wait(1)
+end
+
+-- ==================== MARSHMALLOW FARM ====================
+local Items = {"Gelatin", "Sugar Block Bag", "Water"}
+local ItemPrices = {Gelatin = 70, ["Sugar Block Bag"] = 100, Water = 20}
+local MarshmallowSellPrice = {
+    ["Small Marshmallow Bag"] = 1470,
+    ["Medium Marshmallow Bag"] = 2840,
+    ["Large Marshmallow Bag"] = 4050,
+}
+local MarshmallowNames = {"Small Marshmallow Bag", "Medium Marshmallow Bag", "Large Marshmallow Bag"}
+
+local function GetMarshmallowType(name)
+    for _, m in ipairs(MarshmallowNames) do
+        if m == name then return m end
+    end
+    return nil
+end
+
+-- Step: Beli bahan
+local function BuyIngredients()
+    local needed = Config.BatchAmount
+    -- Hitung total marshmallow yang sudah ada
+    local crafted = 0
+    for _, m in ipairs(MarshmallowNames) do
+        crafted = crafted + CountItem(m)
+    end
+    local toMake = math.max(needed - crafted, 0)
+    if toMake <= 0 then return true end
+
+    for _, item in ipairs(Items) do
+        local have = CountItem(item)
+        local need = toMake - have
+        if need > 0 then
+            for _ = 1, need do
+                ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("StorePurchase"):FireServer(item)
+                Stats.Earned = Stats.Earned - ItemPrices[item]
+                task.wait(0.3)
+            end
+        end
+    end
+    return true
+end
+
+-- Fungsi memasak: lakukan satu siklus
+local function CookCycle()
+    -- Pastikan punya apartemen
+    local apt = GetPersonalApartment()
+    if not apt then
+        Library:Notification("Apartemen", "Belum punya apartemen, membeli...", 3)
+        if not BuyApartment() then
+            Library:Notification("Error", "Gagal membeli apartemen!", 3)
+            return false
+        end
+        apt = GetPersonalApartment()
+        if not apt then return false end
+    end
+
+    local interior = GetHouseInterior()
+    if not interior then return false end
+    local pot = interior:FindFirstChild("Cooking Pot") or interior:FindFirstChild("Stove")
+    if not pot then
+        Library:Notification("Error", "Tidak menemukan kompor!", 3)
+        return false
+    end
+
+    -- Teleport ke kompor
+    Teleport(pot.CFrame)
+    task.wait(0.5)
+
+    -- Fungsi untuk memicu prompt dengan tampilan
+    local function DoStep(stepName, toolName, waitText, delay)
+        if stepName == "Water" then
+            if not EquipTool("Water") then
+                Library:Notification("Error", "Tidak ada Water!", 3)
+                return false
+            end
+            FirePrompt(pot.Attachment.ProximityPrompt)
+            task.wait(2)
+            -- Tunggu hingga task update menunjukkan "Wait 20 seconds..."
+            local timeout = 0
+            repeat
+                task.wait(0.5)
+                timeout = timeout + 0.5
+                if timeout > 30 then break end
+            until Task_Text == "Wait 20 seconds for your water to boil."
+            task.wait(20)
+            LocalPlayer.Character.Humanoid:UnequipTools()
+            MarshMallowStep = "Sugar"
+        elseif stepName == "Sugar" then
+            if not EquipTool("Sugar Block Bag") then
+                Library:Notification("Error", "Tidak ada Sugar Block Bag!", 3)
+                return false
+            end
+            FirePrompt(pot.Attachment.ProximityPrompt)
+            task.wait(2)
+            local timeout = 0
+            repeat
+                task.wait(0.5)
+                timeout = timeout + 0.5
+                if timeout > 30 then break end
+            until Task_Text == "Pour gelatin into the pot."
+            LocalPlayer.Character.Humanoid:UnequipTools()
+            MarshMallowStep = "Gelatin"
+        elseif stepName == "Gelatin" then
+            if not EquipTool("Gelatin") then
+                Library:Notification("Error", "Tidak ada Gelatin!", 3)
+                return false
+            end
+            FirePrompt(pot.Attachment.ProximityPrompt)
+            task.wait(2)
+            local timeout = 0
+            repeat
+                task.wait(0.5)
+                timeout = timeout + 0.5
+                if timeout > 30 then break end
+            until Task_Text == "Let the solution cook for 45 seconds."
+            task.wait(45)
+            LocalPlayer.Character.Humanoid:UnequipTools()
+            MarshMallowStep = "Collect"
+        elseif stepName == "Collect" then
+            if not EquipTool("Empty Bag") then
+                Library:Notification("Error", "Tidak ada Empty Bag!", 3)
+                return false
+            end
+            FirePrompt(pot.Attachment.ProximityPrompt)
+            task.wait(2)
+            local timeout = 0
+            repeat
+                task.wait(0.5)
+                timeout = timeout + 0.5
+                if timeout > 10 then break end
+            until not LocalPlayer.Character:FindFirstChild("Empty Bag")
+            LocalPlayer.Character.Humanoid:UnequipTools()
+            MarshMallowStep = "Sell"
+        end
+        return true
+    end
+
+    -- Urutan langkah
+    local steps = {"Water", "Sugar", "Gelatin", "Collect"}
+    for _, step in ipairs(steps) do
+        if not IsRunning then return false end
+        if not DoStep(step) then return false end
+        if Config.MovementType == "Bike" then
+            -- Pindah ke safe zone sebentar untuk menghindari lag? (opsional)
+        end
+    end
+
+    return true
+end
+
+-- Step: Jual marshmallow
+local function SellMarshmallows()
+    Teleport(Config.SafeZonePosition)
+    task.wait(1)
+    -- Cari NPC Lamont Bell
+    local npc = Workspace.Folders and Workspace.Folders.NPCs and Workspace.Folders.NPCs:FindFirstChild("Lamont Bell")
+    if not npc then
+        Library:Notification("Error", "NPC Lamont Bell tidak ditemukan!", 3)
+        return false
+    end
+    local prompt = npc.UpperTorso:FindFirstChildOfClass("ProximityPrompt")
+    if not prompt then return false end
+
+    -- Jual semua marshmallow di backpack
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            local mType = GetMarshmallowType(tool.Name)
+            if mType then
+                EquipTool(tool.Name)
+                FirePrompt(prompt)
+                Stats.Earned = Stats.Earned + MarshmallowSellPrice[mType]
+                Stats.TotalSold = Stats.TotalSold + 1
+                if mType == "Small Marshmallow Bag" then Stats.Small = Stats.Small + 1
+                elseif mType == "Medium Marshmallow Bag" then Stats.Medium = Stats.Medium + 1
+                elseif mType == "Large Marshmallow Bag" then Stats.Large = Stats.Large + 1
+                end
+                task.wait(0.3)
+            end
+        end
+    end
+    MarshMallowStep = "Water"
+    return true
+end
+
+-- Loop utama farm
+local function FarmLoop()
+    while IsRunning do
+        -- 1. Beli bahan
+        BuyIngredients()
+        -- 2. Masak
+        CookCycle()
+        -- 3. Jual dan safe zone (sudah di SellMarshmallows)
+        SellMarshmallows()
+        -- 4. Kembali ke safe zone untuk aman
+        GoToSafeZone()
+        task.wait(1)
+    end
+end
+
+-- Mulai farm
+local function StartFarm()
+    if IsRunning then return end
+    IsRunning = true
+    MarshMallowStep = "Water"
+    -- Pastikan ada sepeda jika mode bike
+    if Config.MovementType == "Bike" then
+        local bike = FindBike()
+        if not bike then
+            Library:Notification("Bike", "Tidak ada sepeda, spawn sekarang...", 3)
+            SpawnBike()
+            task.wait(2)
+            bike = FindBike()
+            if not bike then
+                Library:Notification("Error", "Gagal spawn sepeda, gunakan Safe Mode!", 3)
+                IsRunning = false
+                return
+            end
+        end
+        -- Coba duduki sepeda
+        local seat = bike:FindFirstChild("DriveSeat")
+        if seat then
+            local prompt = seat:FindFirstChild("Attachment") and seat.Attachment:FindFirstChildOfClass("ProximityPrompt")
+            if prompt then
+                FirePrompt(prompt)
+                task.wait(1)
+            end
+        end
+    end
+    FarmThread = task.spawn(FarmLoop)
+    Library:Notification("Farm", "Marshmallow Farm dimulai!", 3)
+end
+
+local function StopFarm()
+    IsRunning = false
+    if FarmThread then
+        task.cancel(FarmThread)
+        FarmThread = nil
+    end
+    Library:Notification("Farm", "Marshmallow Farm dihentikan!", 3)
+end
+
+-- ==================== TASK TEXT MONITOR ====================
+task.spawn(function()
+    while task.wait(0.2) do
+        local main = LocalPlayer.PlayerGui:FindFirstChild("Main")
+        if main then
+            local taskUpdate = main:FindFirstChild("TaskUpdate")
+            if taskUpdate and taskUpdate:FindFirstChild("TextLabel") then
+                Task_Text = taskUpdate.TextLabel.Text
+            end
+        end
+    end
+end)
+
+-- ==================== ANTI AFK ====================
+local AFK = false
+LocalPlayer.Idled:Connect(function()
+    if not AFK then
+        AFK = true
+        VirtualUser:Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
+        task.wait(0.5)
+        VirtualUser:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
+        AFK = false
+    end
+end)
+
+-- ==================== GUI ====================
+local Library = loadstring(game:HttpGet("https://pastebin.com/raw/vZYJc3ay"))()
+local Window = Library:Window({ Prefix = "Marshmallow", Suffix = "Farm" })
+
+-- Tab utama
+local MainTab = Window:Tab({ Name = "Farm" })
+local Controls = MainTab:Section({ Name = "Kontrol", Side = "Left" })
+local StatsSection = MainTab:Section({ Name = "Statistik", Side = "Right" })
+
+-- Dropdown movement type
+Controls:Dropdown({
+    Name = "Mode Teleport",
+    Flag = "Movement",
+    Options = {"Bike", "SafeMode"},
+    Default = "Bike",
+    Callback = function(val)
+        Config.MovementType = val
+    end
+})
+
+-- Slider batch
+Controls:Slider({
+    Name = "Batch Amount",
+    Flag = "Batch",
+    Min = 1,
+    Max = 30,
+    Default = 5,
+    Suffix = "x",
+    Callback = function(val)
+        Config.BatchAmount = val
+    end
+})
+
+-- Tombol spawn bike
+Controls:Button({
+    Name = "Spawn Bike",
+    Callback = SpawnBike
+})
+
+-- Tombol beli apartemen
+Controls:Button({
+    Name = "Beli Apartemen ($250)",
+    Callback = BuyApartment
+})
+
+-- Toggle start/stop
+local farmToggle
+Controls:Toggle({
+    Name = "Start / Stop Farm",
+    Flag = "FarmToggle",
+    Default = false,
+    Callback = function(state)
+        if state then
+            StartFarm()
+        else
+            StopFarm()
+        end
+    end
+})
+
+-- Tombol safe zone manual
+Controls:Button({
+    Name = "Teleport ke Safe Zone",
+    Callback = GoToSafeZone
+})
+
+-- Label statistik
+local statusLabel = StatsSection:Label({ Name = "Status: Stopped" })
+local stepLabel = StatsSection:Label({ Name = "Step: -" })
+local earnedLabel = StatsSection:Label({ Name = "Earned: $0" })
+local soldLabel = StatsSection:Label({ Name = "Total Sold: 0" })
+local smallLabel = StatsSection:Label({ Name = "Small: 0" })
+local mediumLabel = StatsSection:Label({ Name = "Medium: 0" })
+local largeLabel = StatsSection:Label({ Name = "Large: 0" })
+local deathsLabel = StatsSection:Label({ Name = "Deaths: 0" })
+
+-- Update statistik setiap detik
+task.spawn(function()
+    while task.wait(1) do
+        statusLabel:Set("Status: " .. (IsRunning and "Running" or "Stopped"))
+        stepLabel:Set("Step: " .. MarshMallowStep)
+        earnedLabel:Set("Earned: $" .. Stats.Earned)
+        soldLabel:Set("Total Sold: " .. Stats.TotalSold)
+        smallLabel:Set("Small: " .. Stats.Small)
+        mediumLabel:Set("Medium: " .. Stats.Medium)
+        largeLabel:Set("Large: " .. Stats.Large)
+        deathsLabel:Set("Deaths: " .. Stats.Deaths)
+    end
+end)
+
+-- ==================== DEATH HANDLER ====================
+local function onDeath()
+    Stats.Deaths = Stats.Deaths + 1
+    if IsRunning then
+        Library:Notification("Death", "Karakter mati! Melanjutkan farm...", 3)
+        task.wait(3)
+        -- Coba kembali ke safe zone
+        GoToSafeZone()
+    end
+end
+
+local character = LocalPlayer.Character
+if character then
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.Died:Connect(onDeath)
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    local hum = newChar:WaitForChild("Humanoid")
+    hum.Died:Connect(onDeath)
+    if IsRunning then
+        task.wait(2)
+        GoToSafeZone()
+    end
+end)
+
+print("Script Loaded! Silakan buka GUI dan mulai farm.")
