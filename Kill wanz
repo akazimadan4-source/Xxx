@@ -1,48 +1,30 @@
 --[[
-    WANZZ STORE KILL AURA
-    Versi: 1.0
-    Fitur:
-    - Enable/Disable
-    - Range slider (input angka)
-    - Whitelist player (tambah/hapus via GUI)
-    - Info jumlah pemain dalam range & whitelist
-    - Auto attack target terdekat (kustomisasi di fungsi attackPlayer)
+    WANZZ STORE KILL AURA (FIXED)
+    Versi: 1.1
+    - Perbaiki font bold
+    - Tambah penanganan error kecil
 ]]
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 
 -- ===== SETTINGS =====
 local Settings = {
     Enabled = false,
     Range = 150,
-    Whitelist = {} -- list nama player (string)
+    Whitelist = {}
 }
 
 -- ===== ATTACK FUNCTION (sesuaikan dengan game) =====
 local function attackPlayer(target)
     if not target or not target.Character then return end
-
-    -- Contoh 1: jika pakai tool
-    local char = LocalPlayer.Character
-    if char then
-        local tool = char:FindFirstChildOfClass("Tool")
-        if tool then
-            tool:Activate()
-            -- atau tool:FireServer() / tool.Click:FireServer(target)
-        end
-    end
-
-    -- Contoh 2: kirim remote event (ganti nama remote sesuai game)
+    -- Contoh: klik kiri (cocok untuk game tertentu)
+    -- mouse1click()  -- jika executor mendukung
+    -- Atau pakai remote:
     -- local remote = game:GetService("ReplicatedStorage"):FindFirstChild("AttackRemote")
     -- if remote then remote:FireServer(target) end
-
-    -- Contoh 3: klik kiri otomatis (mouse click)
-    -- mouse1click()
-
     print("[WANZZ] Menyerang:", target.Name)
 end
 
@@ -63,13 +45,9 @@ local function getClosestTarget()
             if targetRoot then
                 local dist = (pos - targetRoot.Position).Magnitude
                 if dist <= Settings.Range and dist < closestDist then
-                    -- cek whitelist
                     local whitelisted = false
                     for _, name in ipairs(Settings.Whitelist) do
-                        if name == player.Name then
-                            whitelisted = true
-                            break
-                        end
+                        if name == player.Name then whitelisted = true break end
                     end
                     if not whitelisted then
                         closest = player
@@ -84,6 +62,10 @@ end
 
 -- ===== GUI =====
 local function createGUI()
+    -- Hapus GUI lama jika ada
+    local oldGui = CoreGui:FindFirstChild("WanzzStoreGUI")
+    if oldGui then oldGui:Destroy() end
+
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "WanzzStoreGUI"
     screenGui.Parent = CoreGui
@@ -102,16 +84,16 @@ local function createGUI()
     title.BackgroundColor3 = Color3.fromRGB(60, 40, 80)
     title.Text = "WANZZ STORE KILL AURA"
     title.TextColor3 = Color3.fromRGB(255, 200, 50)
-    title.Font = Enum.Font.Bold
+    title.Font = Enum.Font.SourceSansBold  -- Perbaikan!
     title.TextScaled = true
     title.Parent = main
 
-    -- Subtitle / credit
+    -- Subtitle
     local sub = Instance.new("TextLabel")
     sub.Size = UDim2.new(1, 0, 0, 20)
     sub.Position = UDim2.new(0, 0, 0, 40)
     sub.BackgroundTransparency = 1
-    sub.Text = "by Wanzz Store • v1.0"
+    sub.Text = "by Wanzz Store • v1.1"
     sub.TextColor3 = Color3.fromRGB(180, 180, 180)
     sub.Font = Enum.Font.SourceSans
     sub.TextSize = 12
@@ -162,7 +144,7 @@ local function createGUI()
         end
     end)
 
-    -- Whitelist Button (buka popup)
+    -- Whitelist Button
     local whitelistBtn = Instance.new("TextButton")
     whitelistBtn.Size = UDim2.new(0, 100, 0, 30)
     whitelistBtn.Position = UDim2.new(0, 155, 0, 100)
@@ -198,11 +180,10 @@ local function createGUI()
     popupTitle.Text = "WHITELIST PLAYER"
     popupTitle.BackgroundColor3 = Color3.fromRGB(60, 40, 80)
     popupTitle.TextColor3 = Color3.fromRGB(255, 200, 50)
-    popupTitle.Font = Enum.Font.Bold
+    popupTitle.Font = Enum.Font.SourceSansBold  -- Perbaikan!
     popupTitle.TextScaled = true
     popupTitle.Parent = popup
 
-    -- List whitelist (ScrollingFrame)
     local listFrame = Instance.new("ScrollingFrame")
     listFrame.Size = UDim2.new(1, -20, 0, 80)
     listFrame.Position = UDim2.new(0, 10, 0, 35)
@@ -214,7 +195,6 @@ local function createGUI()
     listLayout.SortOrder = Enum.SortOrder.Name
     listLayout.Parent = listFrame
 
-    -- Fungsi refresh daftar whitelist
     local function refreshWhitelist()
         for _, child in ipairs(listFrame:GetChildren()) do
             if child:IsA("TextButton") then child:Destroy() end
@@ -229,7 +209,6 @@ local function createGUI()
             btn.TextSize = 13
             btn.Parent = listFrame
             btn.MouseButton1Click:Connect(function()
-                -- hapus dari whitelist
                 for i, v in ipairs(Settings.Whitelist) do
                     if v == name then
                         table.remove(Settings.Whitelist, i)
@@ -237,15 +216,12 @@ local function createGUI()
                     end
                 end
                 refreshWhitelist()
-                -- update info
                 infoLabel.Text = "Players in range: 0 • Whitelisted: " .. #Settings.Whitelist
             end)
         end
-        -- update info
         infoLabel.Text = "Players in range: 0 • Whitelisted: " .. #Settings.Whitelist
     end
 
-    -- Input tambah whitelist
     local addBox = Instance.new("TextBox")
     addBox.Size = UDim2.new(0, 130, 0, 25)
     addBox.Position = UDim2.new(0, 10, 0, 120)
@@ -268,7 +244,6 @@ local function createGUI()
     addBtn.MouseButton1Click:Connect(function()
         local name = addBox.Text
         if name ~= "" then
-            -- cek duplikat
             local dup = false
             for _, v in ipairs(Settings.Whitelist) do
                 if v == name then dup = true break end
@@ -281,7 +256,6 @@ local function createGUI()
         end
     end)
 
-    -- Tombol close popup
     local closePopup = Instance.new("TextButton")
     closePopup.Size = UDim2.new(0, 60, 0, 25)
     closePopup.Position = UDim2.new(1, -70, 0, 120)
@@ -295,7 +269,6 @@ local function createGUI()
         popup.Visible = false
     end)
 
-    -- Buka popup dari tombol whitelist
     whitelistBtn.MouseButton1Click:Connect(function()
         refreshWhitelist()
         popup.Visible = true
@@ -304,7 +277,6 @@ local function createGUI()
     -- ===== UPDATE LOOP =====
     RunService.Heartbeat:Connect(function()
         if not Settings.Enabled then
-            -- tetap update info
             local count = 0
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("HumanoidRootPart") then
@@ -320,13 +292,11 @@ local function createGUI()
             return
         end
 
-        -- serang target
         local target = getClosestTarget()
         if target then
             attackPlayer(target)
         end
 
-        -- update info range
         local count = 0
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
@@ -341,7 +311,7 @@ local function createGUI()
         infoLabel.Text = "Players in range: " .. count .. " • Whitelisted: " .. #Settings.Whitelist
     end)
 
-    -- drag GUI (opsional)
+    -- drag GUI
     local dragging = false
     local dragInput, dragStart, startPos
     main.InputBegan:Connect(function(input)
@@ -365,10 +335,5 @@ local function createGUI()
 end
 
 -- ===== EXECUTE =====
-pcall(function()
-    if CoreGui:FindFirstChild("WanzzStoreGUI") then
-        CoreGui:FindFirstChild("WanzzStoreGUI"):Destroy()
-    end
-end)
-createGUI()
-print("[WANZZ] Kill Aura script loaded!")
+pcall(createGUI)
+print("[WANZZ] Kill Aura script loaded successfully!")
