@@ -1,57 +1,85 @@
 --[[
-    WANZZ STORE KILL AURA (FIXED)
-    Versi: 1.1
-    - Perbaiki font bold
-    - Tambah penanganan error kecil
+    脚本名称: South Bronx Kill Aura (Wanzz Store 特别版)
+    适配游戏: South Bronx: The Trenches
+    核心逻辑: 自动寻找远程事件 (RemoteEvent) 进行攻击
 ]]
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 
--- ===== SETTINGS =====
+-- ===== 用户设置 =====
 local Settings = {
     Enabled = false,
     Range = 150,
-    Whitelist = {}
+    Whitelist = {},
+    AttackRate = 0.1 -- 攻击间隔（秒）
 }
 
--- ===== ATTACK FUNCTION (sesuaikan dengan game) =====
-local function attackPlayer(target)
+-- ===== 核心攻击函数 (适配 South Bronx) =====
+local function Attack(target)
     if not target or not target.Character then return end
-    -- Contoh: klik kiri (cocok untuk game tertentu)
-    -- mouse1click()  -- jika executor mendukung
-    -- Atau pakai remote:
-    -- local remote = game:GetService("ReplicatedStorage"):FindFirstChild("AttackRemote")
-    -- if remote then remote:FireServer(target) end
-    print("[WANZZ] Menyerang:", target.Name)
+
+    -- 1. 尝试通过远程事件 (RemoteEvent) 攻击
+    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("AttackRemote") 
+        or game:GetService("ReplicatedStorage"):FindFirstChild("Damage")
+        or game:GetService("ReplicatedStorage"):FindFirstChild("Hit")
+        or game:GetService("ReplicatedStorage"):FindFirstChild("Combat")
+        or game:GetService("ReplicatedStorage"):FindFirstChild("RemoteEvent")
+        or game:GetService("ReplicatedStorage"):FindFirstChild("Fire") -- 常见的命名
+
+    if remote then
+        -- 尝试发送攻击信号，参数通常是目标的 HumanoidRootPart 或 Humanoid
+        pcall(function()
+            remote:FireServer(target.Character.HumanoidRootPart)
+            remote:FireServer(target.Character) -- 有些游戏需要整个角色
+            remote:FireServer(target) -- 有些只需要玩家对象
+        end)
+    else
+        -- 2. 如果没找到 RemoteEvent，则模拟鼠标左键点击（备用方案）
+        pcall(function()
+            mouse1click()
+        end)
+    end
+
+    -- 3. 极端情况：如果以上都无效，尝试直接修改血量（部分游戏可用）
+    -- pcall(function()
+    --     if target.Character and target.Character:FindFirstChild("Humanoid") then
+    --         target.Character.Humanoid.Health = 0
+    --     end
+    -- end)
 end
 
--- ===== GET TARGET TERDEKAT =====
-local function getClosestTarget()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return nil end
+-- ===== 寻找最近的目标 =====
+local function GetClosestTarget()
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return nil end
 
-    local pos = root.Position
+    local myPosition = rootPart.Position
     local closest = nil
-    local closestDist = math.huge
+    local shortestDist = Settings.Range
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
             if targetRoot then
-                local dist = (pos - targetRoot.Position).Magnitude
-                if dist <= Settings.Range and dist < closestDist then
-                    local whitelisted = false
+                local dist = (myPosition - targetRoot.Position).Magnitude
+                if dist <= Settings.Range then
+                    -- 检查是否在白名单中
+                    local isWhitelisted = false
                     for _, name in ipairs(Settings.Whitelist) do
-                        if name == player.Name then whitelisted = true break end
+                        if name == player.Name then
+                            isWhitelisted = true
+                            break
+                        end
                     end
-                    if not whitelisted then
+                    if not isWhitelisted and dist < shortestDist then
                         closest = player
-                        closestDist = dist
+                        shortestDist = dist
                     end
                 end
             end
@@ -60,172 +88,151 @@ local function getClosestTarget()
     return closest
 end
 
--- ===== GUI =====
-local function createGUI()
-    -- Hapus GUI lama jika ada
-    local oldGui = CoreGui:FindFirstChild("WanzzStoreGUI")
+-- ===== 创建 GUI 菜单 =====
+local function CreateGUI()
+    -- 清理旧 GUI
+    local oldGui = CoreGui:FindFirstChild("WanzzKillAura")
     if oldGui then oldGui:Destroy() end
 
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "WanzzStoreGUI"
+    screenGui.Name = "WanzzKillAura"
     screenGui.Parent = CoreGui
 
-    -- Main Frame
-    local main = Instance.new("Frame")
-    main.Size = UDim2.new(0, 340, 0, 280)
-    main.Position = UDim2.new(0.5, -170, 0.5, -140)
-    main.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    main.BorderSizePixel = 0
-    main.Parent = screenGui
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 300, 0, 200)
+    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
 
-    -- Title
+    -- 标题
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.BackgroundColor3 = Color3.fromRGB(60, 40, 80)
-    title.Text = "WANZZ STORE KILL AURA"
+    title.Size = UDim2.new(1, 0, 0, 35)
+    title.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    title.Text = "WANZZ STORE | SOUTH BRONX"
     title.TextColor3 = Color3.fromRGB(255, 200, 50)
-    title.Font = Enum.Font.SourceSansBold  -- Perbaikan!
+    title.Font = Enum.Font.SourceSansBold
     title.TextScaled = true
-    title.Parent = main
+    title.Parent = mainFrame
 
-    -- Subtitle
-    local sub = Instance.new("TextLabel")
-    sub.Size = UDim2.new(1, 0, 0, 20)
-    sub.Position = UDim2.new(0, 0, 0, 40)
-    sub.BackgroundTransparency = 1
-    sub.Text = "by Wanzz Store • v1.1"
-    sub.TextColor3 = Color3.fromRGB(180, 180, 180)
-    sub.Font = Enum.Font.SourceSans
-    sub.TextSize = 12
-    sub.Parent = main
-
-    -- Enable Button
-    local enableBtn = Instance.new("TextButton")
-    enableBtn.Size = UDim2.new(0, 160, 0, 30)
-    enableBtn.Position = UDim2.new(0, 10, 0, 65)
-    enableBtn.Text = "Enable Kill Aura: OFF"
-    enableBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    enableBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    enableBtn.Font = Enum.Font.SourceSans
-    enableBtn.TextSize = 14
-    enableBtn.Parent = main
-    enableBtn.MouseButton1Click:Connect(function()
+    -- 启用按钮
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 130, 0, 30)
+    toggleBtn.Position = UDim2.new(0, 10, 0, 45)
+    toggleBtn.Text = "Kill Aura: OFF"
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Font = Enum.Font.SourceSans
+    toggleBtn.TextSize = 14
+    toggleBtn.Parent = mainFrame
+    toggleBtn.MouseButton1Click:Connect(function()
         Settings.Enabled = not Settings.Enabled
-        enableBtn.Text = "Enable Kill Aura: " .. (Settings.Enabled and "ON" or "OFF")
+        toggleBtn.Text = "Kill Aura: " .. (Settings.Enabled and "ON" or "OFF")
+        toggleBtn.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(50, 50, 70)
     end)
 
-    -- Range Label
+    -- 范围输入
     local rangeLabel = Instance.new("TextLabel")
-    rangeLabel.Size = UDim2.new(0, 60, 0, 30)
-    rangeLabel.Position = UDim2.new(0, 10, 0, 100)
+    rangeLabel.Size = UDim2.new(0, 50, 0, 30)
+    rangeLabel.Position = UDim2.new(0, 150, 0, 45)
     rangeLabel.BackgroundTransparency = 1
     rangeLabel.Text = "Range"
     rangeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     rangeLabel.Font = Enum.Font.SourceSans
     rangeLabel.TextSize = 14
-    rangeLabel.Parent = main
+    rangeLabel.Parent = mainFrame
 
-    -- Range Input
     local rangeBox = Instance.new("TextBox")
-    rangeBox.Size = UDim2.new(0, 70, 0, 30)
-    rangeBox.Position = UDim2.new(0, 75, 0, 100)
+    rangeBox.Size = UDim2.new(0, 80, 0, 30)
+    rangeBox.Position = UDim2.new(0, 200, 0, 45)
     rangeBox.Text = tostring(Settings.Range)
     rangeBox.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
     rangeBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     rangeBox.Font = Enum.Font.SourceSans
     rangeBox.TextSize = 14
-    rangeBox.Parent = main
+    rangeBox.Parent = mainFrame
     rangeBox.FocusLost:Connect(function()
         local val = tonumber(rangeBox.Text)
-        if val and val > 0 then
-            Settings.Range = val
-        else
-            rangeBox.Text = tostring(Settings.Range)
-        end
+        if val and val > 0 then Settings.Range = val else rangeBox.Text = tostring(Settings.Range) end
     end)
 
-    -- Whitelist Button
-    local whitelistBtn = Instance.new("TextButton")
-    whitelistBtn.Size = UDim2.new(0, 100, 0, 30)
-    whitelistBtn.Position = UDim2.new(0, 155, 0, 100)
-    whitelistBtn.Text = "Whitelist"
-    whitelistBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    whitelistBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    whitelistBtn.Font = Enum.Font.SourceSans
-    whitelistBtn.TextSize = 14
-    whitelistBtn.Parent = main
-
-    -- Info Label
+    -- 信息显示
     local infoLabel = Instance.new("TextLabel")
     infoLabel.Size = UDim2.new(1, -20, 0, 30)
-    infoLabel.Position = UDim2.new(0, 10, 0, 140)
-    infoLabel.Text = "Players in range: 0 • Whitelisted: 0"
+    infoLabel.Position = UDim2.new(0, 10, 0, 85)
+    infoLabel.Text = "Players: 0 | Whitelist: 0"
     infoLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
     infoLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     infoLabel.Font = Enum.Font.SourceSans
     infoLabel.TextSize = 13
-    infoLabel.Parent = main
+    infoLabel.Parent = mainFrame
 
-    -- ===== POPUP WHITELIST =====
+    -- 白名单按钮
+    local wlBtn = Instance.new("TextButton")
+    wlBtn.Size = UDim2.new(0, 280, 0, 30)
+    wlBtn.Position = UDim2.new(0, 10, 0, 125)
+    wlBtn.Text = "Open Whitelist"
+    wlBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    wlBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    wlBtn.Font = Enum.Font.SourceSans
+    wlBtn.TextSize = 14
+    wlBtn.Parent = mainFrame
+
+    -- ==== 白名单弹窗 ====
     local popup = Instance.new("Frame")
-    popup.Size = UDim2.new(0, 250, 0, 180)
-    popup.Position = UDim2.new(0.5, -125, 0.5, -90)
-    popup.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    popup.Size = UDim2.new(0, 250, 0, 150)
+    popup.Position = UDim2.new(0.5, -125, 0.5, -75)
+    popup.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
     popup.BorderSizePixel = 0
     popup.Visible = false
     popup.Parent = screenGui
 
     local popupTitle = Instance.new("TextLabel")
     popupTitle.Size = UDim2.new(1, 0, 0, 30)
-    popupTitle.Text = "WHITELIST PLAYER"
+    popupTitle.Text = "WHITELIST"
     popupTitle.BackgroundColor3 = Color3.fromRGB(60, 40, 80)
     popupTitle.TextColor3 = Color3.fromRGB(255, 200, 50)
-    popupTitle.Font = Enum.Font.SourceSansBold  -- Perbaikan!
+    popupTitle.Font = Enum.Font.SourceSansBold
     popupTitle.TextScaled = true
     popupTitle.Parent = popup
 
-    local listFrame = Instance.new("ScrollingFrame")
-    listFrame.Size = UDim2.new(1, -20, 0, 80)
-    listFrame.Position = UDim2.new(0, 10, 0, 35)
-    listFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-    listFrame.BorderSizePixel = 0
-    listFrame.Parent = popup
+    local wlList = Instance.new("ScrollingFrame")
+    wlList.Size = UDim2.new(1, -20, 0, 60)
+    wlList.Position = UDim2.new(0, 10, 0, 35)
+    wlList.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    wlList.BorderSizePixel = 0
+    wlList.Parent = popup
 
-    local listLayout = Instance.new("UIListLayout")
-    listLayout.SortOrder = Enum.SortOrder.Name
-    listLayout.Parent = listFrame
+    local wlLayout = Instance.new("UIListLayout")
+    wlLayout.SortOrder = Enum.SortOrder.Name
+    wlLayout.Parent = wlList
 
-    local function refreshWhitelist()
-        for _, child in ipairs(listFrame:GetChildren()) do
+    local function RefreshWhitelist()
+        for _, child in ipairs(wlList:GetChildren()) do
             if child:IsA("TextButton") then child:Destroy() end
         end
         for _, name in ipairs(Settings.Whitelist) do
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, -10, 0, 25)
-            btn.Text = name .. "  [x]"
+            btn.Text = name .. " [x]"
             btn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
             btn.TextColor3 = Color3.fromRGB(255, 255, 255)
             btn.Font = Enum.Font.SourceSans
             btn.TextSize = 13
-            btn.Parent = listFrame
+            btn.Parent = wlList
             btn.MouseButton1Click:Connect(function()
                 for i, v in ipairs(Settings.Whitelist) do
-                    if v == name then
-                        table.remove(Settings.Whitelist, i)
-                        break
-                    end
+                    if v == name then table.remove(Settings.Whitelist, i) break end
                 end
-                refreshWhitelist()
-                infoLabel.Text = "Players in range: 0 • Whitelisted: " .. #Settings.Whitelist
+                RefreshWhitelist()
             end)
         end
-        infoLabel.Text = "Players in range: 0 • Whitelisted: " .. #Settings.Whitelist
     end
 
     local addBox = Instance.new("TextBox")
     addBox.Size = UDim2.new(0, 130, 0, 25)
-    addBox.Position = UDim2.new(0, 10, 0, 120)
-    addBox.PlaceholderText = "Nama player"
+    addBox.Position = UDim2.new(0, 10, 0, 100)
+    addBox.PlaceholderText = "Player Name"
     addBox.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
     addBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     addBox.Font = Enum.Font.SourceSans
@@ -234,9 +241,9 @@ local function createGUI()
 
     local addBtn = Instance.new("TextButton")
     addBtn.Size = UDim2.new(0, 80, 0, 25)
-    addBtn.Position = UDim2.new(0, 150, 0, 120)
-    addBtn.Text = "Tambah"
-    addBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+    addBtn.Position = UDim2.new(0, 150, 0, 100)
+    addBtn.Text = "Add"
+    addBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
     addBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     addBtn.Font = Enum.Font.SourceSans
     addBtn.TextSize = 13
@@ -245,58 +252,36 @@ local function createGUI()
         local name = addBox.Text
         if name ~= "" then
             local dup = false
-            for _, v in ipairs(Settings.Whitelist) do
-                if v == name then dup = true break end
-            end
+            for _, v in ipairs(Settings.Whitelist) do if v == name then dup = true break end end
             if not dup then
                 table.insert(Settings.Whitelist, name)
-                refreshWhitelist()
+                RefreshWhitelist()
                 addBox.Text = ""
             end
         end
     end)
 
-    local closePopup = Instance.new("TextButton")
-    closePopup.Size = UDim2.new(0, 60, 0, 25)
-    closePopup.Position = UDim2.new(1, -70, 0, 120)
-    closePopup.Text = "Tutup"
-    closePopup.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-    closePopup.TextColor3 = Color3.fromRGB(255, 255, 255)
-    closePopup.Font = Enum.Font.SourceSans
-    closePopup.TextSize = 13
-    closePopup.Parent = popup
-    closePopup.MouseButton1Click:Connect(function()
-        popup.Visible = false
-    end)
-
-    whitelistBtn.MouseButton1Click:Connect(function()
-        refreshWhitelist()
+    wlBtn.MouseButton1Click:Connect(function()
+        RefreshWhitelist()
         popup.Visible = true
     end)
 
-    -- ===== UPDATE LOOP =====
-    RunService.Heartbeat:Connect(function()
-        if not Settings.Enabled then
-            local count = 0
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local pos = char.HumanoidRootPart.Position
-                for _, player in ipairs(Players:GetPlayers()) do
-                    if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                        local dist = (pos - player.Character.HumanoidRootPart.Position).Magnitude
-                        if dist <= Settings.Range then count = count + 1 end
-                    end
-                end
+    -- 点击弹窗外关闭
+    popup.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local pos = input.Position
+            local absPos = popup.AbsolutePosition
+            local size = popup.AbsoluteSize
+            if not (pos.X >= absPos.X and pos.X <= absPos.X + size.X and pos.Y >= absPos.Y and pos.Y <= absPos.Y + size.Y) then
+                popup.Visible = false
             end
-            infoLabel.Text = "Players in range: " .. count .. " • Whitelisted: " .. #Settings.Whitelist
-            return
         end
+    end)
 
-        local target = getClosestTarget()
-        if target then
-            attackPlayer(target)
-        end
-
+    -- ==== 主循环 (Heartbeat) ====
+    local lastAttackTime = 0
+    RunService.Heartbeat:Connect(function(deltaTime)
+        -- 更新信息
         local count = 0
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
@@ -308,17 +293,28 @@ local function createGUI()
                 end
             end
         end
-        infoLabel.Text = "Players in range: " .. count .. " • Whitelisted: " .. #Settings.Whitelist
+        infoLabel.Text = "Players: " .. count .. " | Whitelist: " .. #Settings.Whitelist
+
+        -- Kill Aura 逻辑
+        if not Settings.Enabled then return end
+
+        lastAttackTime = lastAttackTime + deltaTime
+        if lastAttackTime < Settings.AttackRate then return end
+        lastAttackTime = 0
+
+        local target = GetClosestTarget()
+        if target then
+            Attack(target)
+        end
     end)
 
-    -- drag GUI
-    local dragging = false
-    local dragInput, dragStart, startPos
-    main.InputBegan:Connect(function(input)
+    -- 拖动窗口
+    local dragging, dragInput, dragStart, startPos
+    mainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
-            startPos = main.Position
+            startPos = mainFrame.Position
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -326,14 +322,14 @@ local function createGUI()
             end)
         end
     end)
-    main.InputChanged:Connect(function(input)
+    mainFrame.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             local delta = input.Position - dragStart
-            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
 end
 
--- ===== EXECUTE =====
-pcall(createGUI)
-print("[WANZZ] Kill Aura script loaded successfully!")
+-- ===== 启动脚本 =====
+pcall(CreateGUI)
+print("[WANZZ] South Bronx Kill Aura 已加载! 按 GUI 中的按钮启用。")
