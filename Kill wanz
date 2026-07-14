@@ -1,85 +1,60 @@
 --[[
-    脚本名称: South Bronx Kill Aura (Wanzz Store 特别版)
-    适配游戏: South Bronx: The Trenches
-    核心逻辑: 自动寻找远程事件 (RemoteEvent) 进行攻击
+    WANZZ STORE | SOUTH BRONX KILL AURA
+    GUI Modern Glassmorphism
 ]]
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
--- ===== 用户设置 =====
+-- ===== SETTINGS =====
 local Settings = {
     Enabled = false,
     Range = 150,
     Whitelist = {},
-    AttackRate = 0.1 -- 攻击间隔（秒）
+    AttackRate = 0.1
 }
 
--- ===== 核心攻击函数 (适配 South Bronx) =====
+-- ===== ATTACK FUNCTION (South Bronx) =====
 local function Attack(target)
     if not target or not target.Character then return end
-
-    -- 1. 尝试通过远程事件 (RemoteEvent) 攻击
-    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("AttackRemote") 
+    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("AttackRemote")
         or game:GetService("ReplicatedStorage"):FindFirstChild("Damage")
         or game:GetService("ReplicatedStorage"):FindFirstChild("Hit")
         or game:GetService("ReplicatedStorage"):FindFirstChild("Combat")
         or game:GetService("ReplicatedStorage"):FindFirstChild("RemoteEvent")
-        or game:GetService("ReplicatedStorage"):FindFirstChild("Fire") -- 常见的命名
-
     if remote then
-        -- 尝试发送攻击信号，参数通常是目标的 HumanoidRootPart 或 Humanoid
         pcall(function()
             remote:FireServer(target.Character.HumanoidRootPart)
-            remote:FireServer(target.Character) -- 有些游戏需要整个角色
-            remote:FireServer(target) -- 有些只需要玩家对象
         end)
     else
-        -- 2. 如果没找到 RemoteEvent，则模拟鼠标左键点击（备用方案）
-        pcall(function()
-            mouse1click()
-        end)
+        pcall(mouse1click)
     end
-
-    -- 3. 极端情况：如果以上都无效，尝试直接修改血量（部分游戏可用）
-    -- pcall(function()
-    --     if target.Character and target.Character:FindFirstChild("Humanoid") then
-    --         target.Character.Humanoid.Health = 0
-    --     end
-    -- end)
 end
 
--- ===== 寻找最近的目标 =====
+-- ===== GET CLOSEST TARGET =====
 local function GetClosestTarget()
-    local character = LocalPlayer.Character
-    if not character then return nil end
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return nil end
-
-    local myPosition = rootPart.Position
-    local closest = nil
-    local shortestDist = Settings.Range
-
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local pos = root.Position
+    local closest, dist = nil, Settings.Range
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
             if targetRoot then
-                local dist = (myPosition - targetRoot.Position).Magnitude
-                if dist <= Settings.Range then
-                    -- 检查是否在白名单中
-                    local isWhitelisted = false
+                local d = (pos - targetRoot.Position).Magnitude
+                if d <= Settings.Range then
+                    local whitelisted = false
                     for _, name in ipairs(Settings.Whitelist) do
-                        if name == player.Name then
-                            isWhitelisted = true
-                            break
-                        end
+                        if name == player.Name then whitelisted = true break end
                     end
-                    if not isWhitelisted and dist < shortestDist then
+                    if not whitelisted and d < dist then
                         closest = player
-                        shortestDist = dist
+                        dist = d
                     end
                 end
             end
@@ -88,166 +63,303 @@ local function GetClosestTarget()
     return closest
 end
 
--- ===== 创建 GUI 菜单 =====
+-- ===== CREATE MODERN GUI =====
 local function CreateGUI()
-    -- 清理旧 GUI
-    local oldGui = CoreGui:FindFirstChild("WanzzKillAura")
-    if oldGui then oldGui:Destroy() end
+    local old = CoreGui:FindFirstChild("WanzzKillAura")
+    if old then old:Destroy() end
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "WanzzKillAura"
     screenGui.Parent = CoreGui
 
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 300, 0, 200)
-    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-    mainFrame.BorderSizePixel = 0
-    mainFrame.Parent = screenGui
+    -- Main Container (glass)
+    local main = Instance.new("Frame")
+    main.Size = UDim2.new(0, 320, 0, 240)
+    main.Position = UDim2.new(0.5, -160, 0.5, -120)
+    main.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
+    main.BackgroundTransparency = 0.2
+    main.BorderSizePixel = 0
+    main.ClipsDescendants = true
+    main.Parent = screenGui
 
-    -- 标题
+    -- Corner radius
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 16)
+    corner.Parent = main
+
+    -- Glass overlay (transparan)
+    local glass = Instance.new("Frame")
+    glass.Size = UDim2.new(1, 0, 1, 0)
+    glass.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    glass.BackgroundTransparency = 0.92
+    glass.BorderSizePixel = 0
+    glass.Parent = main
+
+    -- Title
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 35)
-    title.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-    title.Text = "WANZZ STORE | SOUTH BRONX"
-    title.TextColor3 = Color3.fromRGB(255, 200, 50)
+    title.Size = UDim2.new(1, -30, 0, 40)
+    title.Position = UDim2.new(0, 15, 0, 12)
+    title.BackgroundTransparency = 1
+    title.Text = "✦ WANZZ STORE"
+    title.TextColor3 = Color3.fromRGB(220, 220, 255)
     title.Font = Enum.Font.SourceSansBold
-    title.TextScaled = true
-    title.Parent = mainFrame
+    title.TextSize = 18
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = main
 
-    -- 启用按钮
-    local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(0, 130, 0, 30)
-    toggleBtn.Position = UDim2.new(0, 10, 0, 45)
-    toggleBtn.Text = "Kill Aura: OFF"
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleBtn.Font = Enum.Font.SourceSans
-    toggleBtn.TextSize = 14
-    toggleBtn.Parent = mainFrame
-    toggleBtn.MouseButton1Click:Connect(function()
-        Settings.Enabled = not Settings.Enabled
-        toggleBtn.Text = "Kill Aura: " .. (Settings.Enabled and "ON" or "OFF")
-        toggleBtn.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(50, 50, 70)
+    -- Subtitle
+    local sub = Instance.new("TextLabel")
+    sub.Size = UDim2.new(1, -30, 0, 18)
+    sub.Position = UDim2.new(0, 15, 0, 48)
+    sub.BackgroundTransparency = 1
+    sub.Text = "South Bronx · Kill Aura"
+    sub.TextColor3 = Color3.fromRGB(160, 160, 190)
+    sub.Font = Enum.Font.SourceSans
+    sub.TextSize = 12
+    sub.TextXAlignment = Enum.TextXAlignment.Left
+    sub.Parent = main
+
+    -- Toggle (Slider) - Enabled
+    local toggleBg = Instance.new("Frame")
+    toggleBg.Size = UDim2.new(0, 50, 0, 28)
+    toggleBg.Position = UDim2.new(1, -65, 0, 18)
+    toggleBg.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    toggleBg.BorderSizePixel = 0
+    toggleBg.Parent = main
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 14)
+    toggleCorner.Parent = toggleBg
+
+    local toggleCircle = Instance.new("Frame")
+    toggleCircle.Size = UDim2.new(0, 22, 0, 22)
+    toggleCircle.Position = UDim2.new(0, 3, 0, 3)
+    toggleCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    toggleCircle.BorderSizePixel = 0
+    toggleCircle.Parent = toggleBg
+    local circleCorner = Instance.new("UICorner")
+    circleCorner.CornerRadius = UDim.new(0, 11)
+    circleCorner.Parent = toggleCircle
+
+    -- Fungsi toggle
+    local function UpdateToggle()
+        local targetPos = Settings.Enabled and 25 or 3
+        local bgColor = Settings.Enabled and Color3.fromRGB(0, 180, 255) or Color3.fromRGB(60, 60, 80)
+        TweenService:Create(toggleCircle, TweenInfo.new(0.2), {Position = UDim2.new(0, targetPos, 0, 3)}):Play()
+        TweenService:Create(toggleBg, TweenInfo.new(0.2), {BackgroundColor3 = bgColor}):Play()
+    end
+
+    toggleBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            Settings.Enabled = not Settings.Enabled
+            UpdateToggle()
+        end
     end)
+    UpdateToggle()
 
-    -- 范围输入
+    -- Range Slider
     local rangeLabel = Instance.new("TextLabel")
-    rangeLabel.Size = UDim2.new(0, 50, 0, 30)
-    rangeLabel.Position = UDim2.new(0, 150, 0, 45)
+    rangeLabel.Size = UDim2.new(0, 60, 0, 20)
+    rangeLabel.Position = UDim2.new(0, 15, 0, 85)
     rangeLabel.BackgroundTransparency = 1
     rangeLabel.Text = "Range"
-    rangeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    rangeLabel.TextColor3 = Color3.fromRGB(200, 200, 220)
     rangeLabel.Font = Enum.Font.SourceSans
     rangeLabel.TextSize = 14
-    rangeLabel.Parent = mainFrame
+    rangeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    rangeLabel.Parent = main
 
-    local rangeBox = Instance.new("TextBox")
-    rangeBox.Size = UDim2.new(0, 80, 0, 30)
-    rangeBox.Position = UDim2.new(0, 200, 0, 45)
-    rangeBox.Text = tostring(Settings.Range)
-    rangeBox.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    rangeBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    rangeBox.Font = Enum.Font.SourceSans
-    rangeBox.TextSize = 14
-    rangeBox.Parent = mainFrame
-    rangeBox.FocusLost:Connect(function()
-        local val = tonumber(rangeBox.Text)
-        if val and val > 0 then Settings.Range = val else rangeBox.Text = tostring(Settings.Range) end
+    local rangeValue = Instance.new("TextLabel")
+    rangeValue.Size = UDim2.new(0, 40, 0, 20)
+    rangeValue.Position = UDim2.new(1, -55, 0, 85)
+    rangeValue.BackgroundTransparency = 1
+    rangeValue.Text = tostring(Settings.Range)
+    rangeValue.TextColor3 = Color3.fromRGB(255, 255, 255)
+    rangeValue.Font = Enum.Font.SourceSansBold
+    rangeValue.TextSize = 14
+    rangeValue.TextXAlignment = Enum.TextXAlignment.Right
+    rangeValue.Parent = main
+
+    local sliderBg = Instance.new("Frame")
+    sliderBg.Size = UDim2.new(1, -100, 0, 4)
+    sliderBg.Position = UDim2.new(0, 70, 0, 108)
+    sliderBg.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    sliderBg.BorderSizePixel = 0
+    sliderBg.Parent = main
+    local sliderCorner = Instance.new("UICorner")
+    sliderCorner.CornerRadius = UDim.new(0, 2)
+    sliderCorner.Parent = sliderBg
+
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new((Settings.Range - 50) / 250, 0, 1, 0)
+    sliderFill.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+    sliderFill.BorderSizePixel = 0
+    sliderFill.Parent = sliderBg
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(0, 2)
+    fillCorner.Parent = sliderFill
+
+    -- Slider drag (sederhana)
+    local draggingRange = false
+    local function UpdateRange(mouseX)
+        local absPos = sliderBg.AbsolutePosition.X
+        local size = sliderBg.AbsoluteSize.X
+        local newX = math.clamp(mouseX - absPos, 0, size)
+        local newVal = math.floor(50 + (newX / size) * 250)
+        newVal = math.clamp(newVal, 50, 300)
+        Settings.Range = newVal
+        rangeValue.Text = tostring(newVal)
+        sliderFill.Size = UDim2.new(newX / size, 0, 1, 0)
+    end
+
+    sliderBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            draggingRange = true
+            UpdateRange(input.Position.X)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            draggingRange = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if draggingRange and input.UserInputType == Enum.UserInputType.MouseMovement then
+            UpdateRange(input.Position.X)
+        end
     end)
 
-    -- 信息显示
-    local infoLabel = Instance.new("TextLabel")
-    infoLabel.Size = UDim2.new(1, -20, 0, 30)
-    infoLabel.Position = UDim2.new(0, 10, 0, 85)
-    infoLabel.Text = "Players: 0 | Whitelist: 0"
-    infoLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    infoLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    infoLabel.Font = Enum.Font.SourceSans
-    infoLabel.TextSize = 13
-    infoLabel.Parent = mainFrame
+    -- Info label
+    local info = Instance.new("TextLabel")
+    info.Size = UDim2.new(1, -30, 0, 20)
+    info.Position = UDim2.new(0, 15, 0, 130)
+    info.BackgroundTransparency = 1
+    info.Text = "Players: 0 · Whitelist: 0"
+    info.TextColor3 = Color3.fromRGB(180, 180, 200)
+    info.Font = Enum.Font.SourceSans
+    info.TextSize = 13
+    info.TextXAlignment = Enum.TextXAlignment.Left
+    info.Parent = main
 
-    -- 白名单按钮
+    -- Whitelist button
     local wlBtn = Instance.new("TextButton")
-    wlBtn.Size = UDim2.new(0, 280, 0, 30)
-    wlBtn.Position = UDim2.new(0, 10, 0, 125)
-    wlBtn.Text = "Open Whitelist"
-    wlBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    wlBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    wlBtn.Size = UDim2.new(1, -30, 0, 36)
+    wlBtn.Position = UDim2.new(0, 15, 0, 165)
+    wlBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
+    wlBtn.BackgroundTransparency = 0.5
+    wlBtn.Text = "✚  Whitelist Manager"
+    wlBtn.TextColor3 = Color3.fromRGB(200, 200, 230)
     wlBtn.Font = Enum.Font.SourceSans
     wlBtn.TextSize = 14
-    wlBtn.Parent = mainFrame
+    wlBtn.BorderSizePixel = 0
+    wlBtn.Parent = main
+    local wlCorner = Instance.new("UICorner")
+    wlCorner.CornerRadius = UDim.new(0, 8)
+    wlCorner.Parent = wlBtn
 
-    -- ==== 白名单弹窗 ====
+    -- ===== POPUP WHITELIST =====
     local popup = Instance.new("Frame")
-    popup.Size = UDim2.new(0, 250, 0, 150)
-    popup.Position = UDim2.new(0.5, -125, 0.5, -75)
-    popup.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+    popup.Size = UDim2.new(0, 260, 0, 180)
+    popup.Position = UDim2.new(0.5, -130, 0.5, -90)
+    popup.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
+    popup.BackgroundTransparency = 0.15
     popup.BorderSizePixel = 0
     popup.Visible = false
     popup.Parent = screenGui
+    local popCorner = Instance.new("UICorner")
+    popCorner.CornerRadius = UDim.new(0, 16)
+    popCorner.Parent = popup
 
-    local popupTitle = Instance.new("TextLabel")
-    popupTitle.Size = UDim2.new(1, 0, 0, 30)
-    popupTitle.Text = "WHITELIST"
-    popupTitle.BackgroundColor3 = Color3.fromRGB(60, 40, 80)
-    popupTitle.TextColor3 = Color3.fromRGB(255, 200, 50)
-    popupTitle.Font = Enum.Font.SourceSansBold
-    popupTitle.TextScaled = true
-    popupTitle.Parent = popup
+    -- glass popup
+    local popGlass = Instance.new("Frame")
+    popGlass.Size = UDim2.new(1, 0, 1, 0)
+    popGlass.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    popGlass.BackgroundTransparency = 0.93
+    popGlass.BorderSizePixel = 0
+    popGlass.Parent = popup
 
-    local wlList = Instance.new("ScrollingFrame")
-    wlList.Size = UDim2.new(1, -20, 0, 60)
-    wlList.Position = UDim2.new(0, 10, 0, 35)
-    wlList.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-    wlList.BorderSizePixel = 0
-    wlList.Parent = popup
+    local popTitle = Instance.new("TextLabel")
+    popTitle.Size = UDim2.new(1, -20, 0, 35)
+    popTitle.Position = UDim2.new(0, 10, 0, 8)
+    popTitle.BackgroundTransparency = 1
+    popTitle.Text = "Whitelist"
+    popTitle.TextColor3 = Color3.fromRGB(220,220,255)
+    popTitle.Font = Enum.Font.SourceSansBold
+    popTitle.TextSize = 16
+    popTitle.TextXAlignment = Enum.TextXAlignment.Left
+    popTitle.Parent = popup
 
-    local wlLayout = Instance.new("UIListLayout")
-    wlLayout.SortOrder = Enum.SortOrder.Name
-    wlLayout.Parent = wlList
+    local listFrame = Instance.new("ScrollingFrame")
+    listFrame.Size = UDim2.new(1, -20, 0, 80)
+    listFrame.Position = UDim2.new(0, 10, 0, 48)
+    listFrame.BackgroundColor3 = Color3.fromRGB(30, 32, 40)
+    listFrame.BackgroundTransparency = 0.4
+    listFrame.BorderSizePixel = 0
+    listFrame.Parent = popup
+    local listCorner = Instance.new("UICorner")
+    listCorner.CornerRadius = UDim.new(0, 8)
+    listCorner.Parent = listFrame
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.SortOrder = Enum.SortOrder.Name
+    listLayout.Padding = UDim.new(0, 4)
+    listLayout.Parent = listFrame
 
     local function RefreshWhitelist()
-        for _, child in ipairs(wlList:GetChildren()) do
+        for _, child in ipairs(listFrame:GetChildren()) do
             if child:IsA("TextButton") then child:Destroy() end
         end
         for _, name in ipairs(Settings.Whitelist) do
             local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(1, -10, 0, 25)
-            btn.Text = name .. " [x]"
-            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.Size = UDim2.new(1, -10, 0, 28)
+            btn.BackgroundColor3 = Color3.fromRGB(45, 48, 60)
+            btn.BackgroundTransparency = 0.4
+            btn.Text = name .. "  ❌"
+            btn.TextColor3 = Color3.fromRGB(220,220,240)
             btn.Font = Enum.Font.SourceSans
             btn.TextSize = 13
-            btn.Parent = wlList
+            btn.BorderSizePixel = 0
+            btn.Parent = listFrame
+            local btnCorner = Instance.new("UICorner")
+            btnCorner.CornerRadius = UDim.new(0, 6)
+            btnCorner.Parent = btn
             btn.MouseButton1Click:Connect(function()
                 for i, v in ipairs(Settings.Whitelist) do
                     if v == name then table.remove(Settings.Whitelist, i) break end
                 end
                 RefreshWhitelist()
+                UpdateInfo()
             end)
         end
     end
 
     local addBox = Instance.new("TextBox")
-    addBox.Size = UDim2.new(0, 130, 0, 25)
-    addBox.Position = UDim2.new(0, 10, 0, 100)
-    addBox.PlaceholderText = "Player Name"
-    addBox.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    addBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    addBox.Size = UDim2.new(0, 140, 0, 30)
+    addBox.Position = UDim2.new(0, 10, 0, 138)
+    addBox.PlaceholderText = "Nama player"
+    addBox.BackgroundColor3 = Color3.fromRGB(40, 44, 56)
+    addBox.BackgroundTransparency = 0.3
+    addBox.TextColor3 = Color3.fromRGB(255,255,255)
     addBox.Font = Enum.Font.SourceSans
     addBox.TextSize = 13
+    addBox.BorderSizePixel = 0
     addBox.Parent = popup
+    local addCorner = Instance.new("UICorner")
+    addCorner.CornerRadius = UDim.new(0, 8)
+    addCorner.Parent = addBox
 
     local addBtn = Instance.new("TextButton")
-    addBtn.Size = UDim2.new(0, 80, 0, 25)
-    addBtn.Position = UDim2.new(0, 150, 0, 100)
+    addBtn.Size = UDim2.new(0, 70, 0, 30)
+    addBtn.Position = UDim2.new(1, -80, 0, 138)
     addBtn.Text = "Add"
-    addBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-    addBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    addBtn.Font = Enum.Font.SourceSans
-    addBtn.TextSize = 13
+    addBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+    addBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    addBtn.Font = Enum.Font.SourceSansBold
+    addBtn.TextSize = 14
+    addBtn.BorderSizePixel = 0
     addBtn.Parent = popup
+    local addCorner2 = Instance.new("UICorner")
+    addCorner2.CornerRadius = UDim.new(0, 8)
+    addCorner2.Parent = addBtn
     addBtn.MouseButton1Click:Connect(function()
         local name = addBox.Text
         if name ~= "" then
@@ -257,16 +369,12 @@ local function CreateGUI()
                 table.insert(Settings.Whitelist, name)
                 RefreshWhitelist()
                 addBox.Text = ""
+                UpdateInfo()
             end
         end
     end)
 
-    wlBtn.MouseButton1Click:Connect(function()
-        RefreshWhitelist()
-        popup.Visible = true
-    end)
-
-    -- 点击弹窗外关闭
+    -- Close popup ketika klik di luar
     popup.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             local pos = input.Position
@@ -278,10 +386,13 @@ local function CreateGUI()
         end
     end)
 
-    -- ==== 主循环 (Heartbeat) ====
-    local lastAttackTime = 0
-    RunService.Heartbeat:Connect(function(deltaTime)
-        -- 更新信息
+    wlBtn.MouseButton1Click:Connect(function()
+        RefreshWhitelist()
+        popup.Visible = true
+    end)
+
+    -- ===== UPDATE INFO =====
+    local function UpdateInfo()
         local count = 0
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
@@ -293,43 +404,41 @@ local function CreateGUI()
                 end
             end
         end
-        infoLabel.Text = "Players: " .. count .. " | Whitelist: " .. #Settings.Whitelist
+        info.Text = "Players: " .. count .. " · Whitelist: " .. #Settings.Whitelist
+    end
 
-        -- Kill Aura 逻辑
+    -- ===== HEARTBEAT =====
+    local lastAttack = 0
+    RunService.Heartbeat:Connect(function(dt)
+        UpdateInfo()
         if not Settings.Enabled then return end
-
-        lastAttackTime = lastAttackTime + deltaTime
-        if lastAttackTime < Settings.AttackRate then return end
-        lastAttackTime = 0
-
+        lastAttack = lastAttack + dt
+        if lastAttack < Settings.AttackRate then return end
+        lastAttack = 0
         local target = GetClosestTarget()
-        if target then
-            Attack(target)
-        end
+        if target then Attack(target) end
     end)
 
-    -- 拖动窗口
-    local dragging, dragInput, dragStart, startPos
-    mainFrame.InputBegan:Connect(function(input)
+    -- Drag main
+    local drag, start, pos
+    main.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
+            drag = true
+            start = input.Position
+            pos = main.Position
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
+                if input.UserInputState == Enum.UserInputState.End then drag = false end
             end)
         end
     end)
-    mainFrame.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    main.InputChanged:Connect(function(input)
+        if drag and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - start
+            main.Position = UDim2.new(pos.X.Scale, pos.X.Offset + delta.X, pos.Y.Scale, pos.Y.Offset + delta.Y)
         end
     end)
 end
 
--- ===== 启动脚本 =====
+-- ===== START =====
 pcall(CreateGUI)
-print("[WANZZ] South Bronx Kill Aura 已加载! 按 GUI 中的按钮启用。")
+print("[WANZZ] Modern GUI Kill Aura loaded.")
