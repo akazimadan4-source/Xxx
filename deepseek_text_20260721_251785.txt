@@ -1,0 +1,42 @@
+while Configuration.Main_Settings.Autofarming do
+    WaitForReady()
+
+    local ApartmentOk = StartMarshmallowFarm()
+    if not ApartmentOk then task.wait(5) continue end
+
+    PurchaseMarshmallowIngredients()
+
+    local WaterOk = PourWater()
+    if not WaterOk then
+        repeat StartMarshmallowFarm(); WaterOk = PourWater() until WaterOk
+    end
+
+    local potatoPrepDone = false
+    task.spawn(function()
+        PurchasePotatoIngredients()
+        StartPotatoJob()
+        CutPotato()
+        BagPotato()
+        MixFlourAndPotato()
+        CookPotatoChips()
+        potatoPrepDone = true
+    end)
+
+    for i = 20, 1, -1 do ... end  -- menunggu air
+
+    while not potatoPrepDone and ... do task.wait(0.5) end
+
+    AddSugarAndGelatin()  -- ini terjadi setelah potatoPrepDone selesai, artinya setelah CookPotatoChips selesai.
+
+    -- card scam
+
+    for i = 40, 1, -1 do ... end -- menunggu marshmallow matang
+
+    BagMarshmallowAndSell()
+    ClaimPotatoChipsAndSell()  -- ini setelah marshmallow selesai, juga claim potato chips yang sudah matang (karena waktu total 20+40=60 detik, potato chips butuh 60 detik juga)
+
+    -- card scam
+
+    -- Reset variabel
+    AvailablePot = nil; PotPrompt = nil; PotTimer = nil
+    -- siklus selesai, kembali ke awal loop
