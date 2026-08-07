@@ -1,0 +1,4 @@
+-- Deobfuscated by BaconCheatz | .gg/DwREVahzN
+
+local _UDimnew2 =UDim["new"]
+local er =error("Luraph Script:(internal): line 3: attempt to index nil with 'new'")
