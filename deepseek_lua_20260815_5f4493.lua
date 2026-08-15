@@ -365,7 +365,7 @@ end
 
 local function createUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "191_STORE"
+    screenGui.Name = "LENGER_STORE"
     screenGui.Parent = PlayerGui
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -405,7 +405,7 @@ local function createUI()
     titleLabel.Position = UDim2.new(0, 28, 0, 0)
     titleLabel.Size = UDim2.new(0, 160, 1, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "191 STORE"
+    titleLabel.Text = "LENGER STORE"
     titleLabel.Font = Enum.Font.GothamBlack
     titleLabel.TextSize = 15
     titleLabel.TextColor3 = COLORS.text
